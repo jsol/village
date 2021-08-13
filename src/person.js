@@ -2,7 +2,7 @@ const NUM_TRAITS = 16
 let id = 0
 class Person {
 
-    constructor(m, f, world) {
+    constructor(m, f) {
         id++
         this.id = id
         this.age = 0
@@ -22,6 +22,9 @@ class Person {
         this.father = f
 
         this.children = []
+        this.friends = []
+
+        this.spouce = null
 
         this.gender = Math.random() > .5 ? 'f' : 'm'
 
@@ -47,68 +50,157 @@ class Person {
             this.preferences.push(uniformRandom())
         }
 
-        this.others = new Map()
-        world.set(this.id, this)
-
         if (m && f) {
-            this.addOther(m, 4, world) // will also add f by association
             m.children.push(this)
             f.children.push(this)
         }
     }
 
-    addOther(person, closeness, world) {
-        if (person === this) {
+    checkAlive() {
+        if (!this.alive) {
+            return false
+        }
+
+        let factor = this.age
+        if (factor < 10 * 52) {
+            factor = 5200
+        }
+
+        factor = factor * factor * factor
+        factor = factor / 100000000000000
+
+        if (Math.random() < factor) {
+            this.alive = false
+        }
+
+        return this.alive
+    }
+
+
+    checkMeet(world) {
+        if (this.age < 3 * 52 || this.age > 75 * 52) {
             return
         }
 
-        if (!this.others.has(person.id)) {
-            person.others.forEach((v, k) => {
-                if (k === this.id) {
-                    return
-                }
-
-                let cl = v * closeness
-                if (cl > 1000) {
-                    cl = 1000
-                }
-
-                if (!this.others.has(k) || this.others.get(k) > cl) {
-                    this.others.set(k, cl)
-                    const other = world.get(k)
-                    if (!other.others.get(this.id) || other.others.get(this.id) < cl) {
-                        other.others.set(this.id, cl)
-                    }
-                }
-            })
+        if (Math.random() < .01) {
+            const other = world[Math.floor(Math.random() * world.length)]
+            this.friends.push([this.likes(other), other])
         }
 
-        if (!this.others.has(person.id) || this.others.get(person.id) > closeness) {
-            this.others.set(person.id, closeness)
+        if (this.age < 10 * 52) {
+            this.meet()
+        }
+        if (this.age < 18 * 52) {
+            this.meet()
+        }
+        this.meet()
+    }
+
+    sortFriends() {
+
+        if (this.friends.length > 2 && Math.random() < .1) {
+            this.friends.splice(Math.floor(Math.random()*this.friends.length), 1);
+        }
+
+        this.friends = this.friends.map(f => f[1].alive ? f : null).filter(f => f !== null)
+        this.friends.sort((a, b) => b[0] - a[0])
+        while (this.friends.length > 12) {
+            this.friends.pop()
         }
     }
 
-    adjustCloseness(other) {
-        if (other === this) {
+    checkMarriage() {
+        if (this.spouce !== null) {
             return
         }
 
-        let mod = this.likes(other)
-        let cl = this.others.get(other.id) || 1000
-        mod = mod * cl / 20
-        cl = cl - mod
-        const otherCl = other.others.get(this.id) || 1000
-        cl = Math.round((cl + otherCl) / 2)
-
-        if (cl < 2) {
-            cl = 2
+        if (this.age < 18 * 52) {
+            return
         }
 
-        this.others.set(other.id, cl)
-        other.others.set(this.id, cl)
+
+        const ageOk = (a, b) => {
+            const aa = a.age / 52
+            const bb = b.age / 52
+
+            return aa >= 15 && bb >= 15 && bb >= aa / 2 + 7
+        }
+
+        for (let i = 0; i < this.friends.length; i++) {
+            const f = this.friends[i][1]
+            if (f.spouce === null &&
+                f.gender !== this.gender
+                && ageOk(this, f)
+                && !this.related(f) &&
+                f.likes(this) > 0) {
+
+                this.spouce = f
+                f.spouce = this
+            }else {
+                 //console.log('Gender: ', this.gender !== f.gender, 'Age: ', ageOk(this, f), 'Related: ', !this.related(f),'Likes:', f.likes(this)>0)
+            }
+        }
+
+    }
+
+    checkPregnency() {
+        if (this.gender !== 'f' || this.age < 52 * 15 || this.age > 52 * 45) {
+            return
+        }
+
+        if (this.spouce) {
+            if (Math.random() < (10 / (this.age + this.spouce.age))) {
+                if (this.children.length === 0 || Math.min(...this.children.map(c => c.age)) > 42) {
+                    return new Person(this, this.spouce)
+                }
+            }
+        } else {
+            for (let i = 0; i < this.friends.length; i++) {
+                const f = this.friends[i][1]
+                if (f.gender === 'm' && this.likes(f) > 2 && f.likes(this) > 2 && !this.related(f) && Math.random() < (10 / (this.age + f.age))) {
+                    if (this.children.length === 0 || Math.min(...this.children.map(c => c.age)) > 42) {
+                        return new Person(this, f)
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    meet() {
+        const pick = person => {
+            if (!person) {
+                return null
+            }
+             
+            let options = person.friends.concat()
+            if (options.length < 2) {
+                options.push([0, person.mother])
+                options.push([0, person.father])
+            }
+
+            return options[Math.floor(Math.random() * options.length)][1];
+        }
+
+        let newFriend = pick(this)
+        const currentFriends = this.friends.map(f => f[1])
+        let i = 4
+        while (currentFriends.includes(newFriend) && i > 0) {
+            newFriend = pick(newFriend)
+            i--
+        }
+
+        if (newFriend !== null && !currentFriends.includes(newFriend)) {
+            this.friends.push([this.likes(newFriend), newFriend])
+        }
     }
 
     related(other, deep = true) {
+
+        if (this.mother === null && other.mother === null) {
+            return false
+        }
+
         return !!(other === this ||
             other.father === this.father ||
             other.mother === this.mother ||
@@ -119,15 +211,11 @@ class Person {
     }
 
     likes(other) {
-        if (this.likesCache.has(other.id)) {
-            return this.likesCache.get(other.id)
-        }
         let sum = 0
         for (let i = 0; i < NUM_TRAITS; i++) {
             sum += this.preferences[i] * other.personality[i]
         }
 
-        this.likesCache.set(other.id, sum)
         return sum
     }
 }

@@ -1,8 +1,7 @@
 const Person = require('./src/person')
 
 
-const world = new Map()
-
+const world = []
 
 const COUPLES = 20
 
@@ -20,139 +19,106 @@ const boxMullerRandom = () => {
     return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
 }
 
-const tmp = []
+let old = new Person(null, null)
+for (let i = 0; i < 10000; i++) {
+    const p = new Person(null, null)
+    p.friends.push([p.likes(old), old])
+    old.friends.push([old.likes(p), p])
 
-for (let i = 0; i < 100; i++) {
-    const p = new Person(null, null, world)
-    p.age = 20 + Math.round(Math.random() * 40) * 52
-    tmp.push(p)
+    p.age = (20 + Math.round(Math.random() * 10)) * 52
+    old = p
+    world.push(p)
 }
 
-world.forEach((person, id) => {
+world.forEach((person) => {
     const friends = Math.random() * 20
 
     for (let i = 0; i < friends; i++) {
-        const other = world.get([...world.keys()][Math.floor(Math.random() * world.size)])
-        person.addOther(other, 2 + Math.random() * 1000, world)
+        const other = world[Math.floor(Math.random() * world.length)]
+        person.friends.push([person.likes(other), other])
     }
 })
 
+const alive = world.concat() // Just get a shallow copy
 
-for (let i = 0; i < COUPLES; i++) {
-    const a = tmp.pop()
-    const b = tmp.pop()
-
-    a.addOther(b, 4, world)
-    b.addOther(a, 4, world)
-    a.marriedTo = b
-    b.marriedTo = a
-
-    let c = Math.round((boxMullerRandom() + (Math.PI)) / Math.PI * MAX_CHILDREN)
-    console.log('Children', c)
-    for (let j = 0; j < c; j++) {
-        a.gender = 'f'
-        b.gender = 'm'
-        new Person(a, b, world)
-    }
-
-}
-
-const alive = new Map(world)
-
-let ticks = 10000
+let ticks = 6000
 
 //console.log(world)
-console.log(world.size)
+console.log(world.length)
 
 function end() {
-    world.forEach(p => console.log(Math.round(p.age / 52), p.children.length))
+    console.log('WORLD', world.length)
+    console.log('ALIVE', alive.length)
+
+    let m = 0
+
+    let a = 0
+    let an = 0
+    let at = 0
+    let c = 0
+    let fc = 0
+    let fwcn = 0
+    let fwc = 0
+    let ct = 0
+    world.forEach(p => {
+        if (p.spouce !== null) m++
+        if (!p.alive) {
+            a+= p.age
+            an++
+            if (p.age > at) {
+                at = p.age
+            }
+        }
+
+        if (p.gender === 'f') {
+            c += p.children.length
+            fc++
+            if (p.children.length > ct) {
+                ct = p.children.length
+            }
+
+            if (p.children.length > 0) {
+                fwc += p.children.length
+                fwcn ++
+            }
+        }
+    })
+
+    console.log('Married:', m)
+
+    console.log('Avg age of death: ', (a/an / 52))
+    console.log('Oldest death: ', (at/52))
+
+    console.log('Child per woman: ', c / fc, 'Child per woman with kids: ', fwc / fwcn, 'Woman with most kids: ', ct)
+    //world.forEach(p => console.log(Math.round(p.age / 52),p.spouce, p.friends.map(f => [p.likes(f), f.likes(p), f.gender, p.gender, f.age, p.age])))
+    //console.log(world)
 }
 
 tick(world, alive)
 
 function tick(world, alive) {
-    alive.forEach((person, id) => {
-        if (person.age < 10) {
-            person.age = 10
-        }
-        let factor = person.age * person.age
+    alive.forEach((person, index) => {
 
-        factor = factor / 10000000000
-
-        if (Math.random() < factor) {
-            console.log(`Person ${person.id} died!`, factor, Math.round(person.age / 52), world.size, alive.size)
-            person.alive = false
-            alive.delete(person.id)
-            console.log('Oldest: ', Math.round(Math.max(...Array.from(alive).map(v => v[1].age))/52))
+        if (!person.checkAlive()) {
+            alive.splice(index, 1)
             return
         }
 
         person.age++
-        person.others.forEach((cl, oid) => {
-            if (Math.random() < (1 / cl)) {
-                const other = world.get(oid)
 
-                if (!other.alive) {
-                    person.others.delete(oid)
-                    return
-                }
-
-                person.adjustCloseness(other)
-                //console.log(`${id} and ${oid} met! Old value: ${cl}. New value: ${person.others.get(oid)}.`)
-                //console.log('CL: ', cl, person.age, other.age, person.gender, other.gender, person.related(other))
-
-                ageOK = (a, b) => {
-                    const aa = a.age / 52
-                    const bb = b.age / 52
-
-                    if (a.gender === 'f' && aa > 45) {
-                        return false
-                    }
-
-                    if (b.gender === 'f' && bb > 45) {
-                        return false
-                    }
-
-                    return aa >= 15 && bb >= 15 && bb >= aa / 2 + 7
-                }
-
-                if (person.marriedTo === other) {
-                    if (Math.random() < (10/(person.age + other.age)) ) {
-                        let m = person
-                        if (m.gender !== 'f') {
-                            m = other
-                        }
-                        if (Math.min(...m.children.map(c => c.age)) > 42) {
-                            const newPerson = new Person(person, other, world)
-                            alive.set(newPerson.id, newPerson)
-                        }
-                    }
-                } else if (cl < 30 && ageOK(person, other) && person.gender !== other.gender && !person.related(other)) {
-                    person.marriedTo = other
-                    other.marriedTo = person
-                }
-            } else {
-                //console.log(`${id} and ${oid} did NOT meet! Old value: ${cl}.`)
-            }
-        })
-
-        if (person.age > YEAR * 3 && person.age < YEAR * 15) {
-            alive.forEach(other => {
-                const diff = Math.abs(other.age - person.age) + 1
-                if (Math.random() < 1 / diff) {
-                    person.adjustCloseness(other)
-                }
-            })
+        person.checkMeet(alive)
+        person.sortFriends()
+        person.checkMarriage()
+        const child = person.checkPregnency()
+        if (child) {
+            world.push(child)
+            alive.push(child)
         }
-
-        // Add one random encounter each iteration
-        const other = world.get([...world.keys()][Math.floor(Math.random() * world.size)])
-        person.adjustCloseness(other)
     })
-    
+
 
     ticks--
-    console.log('Ticks left: ', ticks)
+    console.log('Ticks left: ', ticks, world.length, alive.length)
     if (ticks > 0) {
         process.nextTick(tick, world, alive)
     } else {
